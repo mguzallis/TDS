@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: "Kallisto";
+    src: url("{{ assets_dir }}/fonts/Kallisto_Heavy.otf") format("opentype"),
+         url("{{ assets_dir }}/fonts/kallisto.black.ttf") format("truetype");
+    font-weight: 900;
+  }
+  @font-face {
+    font-family: "Poppins";
+    src: url("{{ assets_dir }}/fonts/Poppins-Regular.ttf") format("truetype");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "Poppins";
+    src: url("{{ assets_dir }}/fonts/Poppins-Bold.ttf") format("truetype");
+    font-weight: 700;
+  }
+  @page { size: 816px 1056px; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    font-family: "Poppins", Arial, sans-serif;
+    color: #173F66;
+    background: #ffffff;
+  }
+  .page {
+    width: 816px; min-height: 1056px;
+    position: relative;
+    overflow: hidden;
+    padding-bottom: 136px;
+  }
+  .page + .page { page-break-before: always; }
+
+  /* Watermark placement matches the exact embedded-image rect confirmed
+     across every real shipped file (IC947, M-OS764, R-T600, T310 mock):
+     PDF rect (32.25,151.5)-(579.75,653.25)pt on a 612x792pt page, converted
+     to our 816x1056 CSS px canvas at the fixed 0.75pt/px ratio. The image
+     itself is already pale/faint — the real template renders it at full
+     opacity (confirmed via the PDF's ExtGState: /ca 1), so we no longer
+     apply an extra CSS opacity on top of it (that was double-fading it). */
+  .watermark {
+    position: absolute;
+    left: 43px; top: 202px;
+    width: 730px; height: 669px;
+    z-index: 0;
+  }
+  .watermark img { width: 100%; height: 100%; object-fit: contain; }
+
+  .header { position: relative; height: 164px; overflow: visible; z-index: 3; }
+  .header img.bg { position: absolute; top:0; left:0; width:100%; height:164px; object-fit: cover; z-index: 1; }
+  .header .logo { position: absolute; z-index: 2; top: 28px; left: 30px; height: 100px; }
+  /* Confirmed against R-T600's embedded photo rect: (331.5,-15.75)-(573.75,225.75)pt
+     on a 612x792pt page -> this 816px canvas. The photo bleeds above the header's
+     top edge and down into the body, roughly square, right-aligned with ~51px margin. */
+  .header .photo {
+    position: absolute; z-index: 2; top: -21px; right: 51px; width: 323px; height: 322px;
+    object-fit: contain;
+  }
+
+  .title-block { position: relative; z-index: 1; padding: 20px 32px 0 32px; }
+  .doc-label { font-family: "Poppins", Arial, sans-serif; font-size: 16.2pt; font-weight: 700; letter-spacing: 2.5pt; color: #8c93a6; text-transform: uppercase; }
+  .sku { font-family: "Kallisto", Arial, sans-serif; font-weight: 900; font-size: 40.8pt; color: #173F66; line-height: 1.05; margin-top: 4px; }
+  .product-name { font-family: "Kallisto", Arial, sans-serif; font-weight: 900; font-size: 19.9pt; color: #173F66; margin-top: 2px; }
+
+  .body { position: relative; z-index: 1; display: flex; padding: 6px 32px 0 32px; gap: 29px; }
+  .col-left { width: 374px; }
+  .col-right { width: 345px; }
+
+  .intro { font-family: "Poppins", Arial, sans-serif; font-size: 8.1pt; line-height: 1.45; margin: 4px 0 2px 0; }
+
+  h2.section {
+    font-family: "Poppins", Arial, sans-serif; font-weight: 700;
+    font-size: 15.1pt; color: #173F66; margin: 13px 0 6px 0;
+  }
+  ul.bullets { margin: 0; padding-left: 16px; }
+  ul.bullets li { font-family: "Poppins", Arial, sans-serif; font-size: 8.1pt; line-height: 1.4; margin-bottom: 2px; }
+  p.lead { font-family: "Poppins", Arial, sans-serif; font-size: 8.1pt; margin: 0 0 4px 0; }
+
+  /* Technical Data: plain column headers over a stack of solid navy bars,
+     matching the shipped catalog template (no Test Method column, no
+     zebra striping — that was a mockup-only experiment, not what went
+     into production). Confirmed against real files: header row 7.2pt,
+     data rows 6.2pt, both Poppins Bold; bar color #2A4267 (not the darker
+     heading-text navy #173F66). */
+  .techdata-head {
+    display: flex; font-family: "Poppins", Arial, sans-serif; font-weight: 700; font-size: 7.2pt; color: #173F66;
+    padding: 0 10px; margin-top: 4px;
+  }
+  .techdata-head .c1 { width: 55%; text-align: center; }
+  .techdata-head .c2 { width: 45%; text-align: center; }
+  .techdata-row {
+    display: flex; gap: 6px; margin-bottom: 4px;
+  }
+  .techdata-row .c1, .techdata-row .c2 {
+    background: #2A4267; color: #fff; border-radius: 3px; font-family: "Poppins", Arial, sans-serif;
+    padding: 4px 8px; font-size: 6.2pt; font-weight: 700; text-align: center;
+  }
+  .techdata-row .c1 { width: 55%; }
+  .techdata-row .c2 { width: 45%; }
+
+  .packaging-boxes { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .pack-box { background: #2A4267; color: #fff; font-family: "Poppins", Arial, sans-serif; font-size: 7.2pt; font-weight: 700; padding: 6px 14px; border-radius: 3px; }
+
+  .body p { font-family: "Poppins", Arial, sans-serif; font-size: 8.1pt; line-height: 1.42; margin: 0 0 7px 0; }
+  .precaution-box { font-family: "Poppins", Arial, sans-serif; font-size: 8.1pt; margin-top: 2px; }
+  .precaution-box .needs-confirm {
+    display: inline-block; background: #fff4e9; border: 1px solid #e8622a;
+    color: #a4461c; font-weight: 700; padding: 2px 6px; border-radius: 3px; font-size: 7.4pt;
+  }
+
+  .info-block p { font-family: "Poppins", Arial, sans-serif; font-size: 8.1pt; line-height: 1.38; margin: 0 0 7px 0; }
+  .info-block b { font-weight: 700; }
+
+  /* Footer: confirmed navy #2A4267 (distinct from the darker heading-text
+     navy), confirmed true height ~102pt (136px here) across IC947,
+     M-OS764, R-T600 and the T310 reference — previously rendered ~25%
+     too short with the wrong, too-dark navy. */
+  .footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; background: #2A4267; color: #fff; }
+  .footer .claim { font-family: "Poppins", Arial, sans-serif; text-align: center; font-size: 11pt; font-weight: 700; letter-spacing: 1px; padding: 10px 0 6px 0; }
+  .footer .bottom-row { display: flex; align-items: center; justify-content: space-between; padding: 0 32px 18px 32px; }
+  .usa-badge { width: 188px; }
+  .usa-badge img { width: 100%; display: block; }
+  .footer .contact { font-family: "Poppins", Arial, sans-serif; text-align: center; font-size: 8.1pt; line-height: 1.25; }
+  .footer .contact-group + .contact-group { margin-top: 6px; }
+  .footer .qr { width: 88px; height: 88px; }
+  .footer .qr img { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="page">
+  <div class="watermark"><img src="{{ assets_dir }}/watermark.png"></div>
+
+  <div class="header">
+    <img class="bg" src="{{ assets_dir }}/headers/{{ vertical | default('insulation') }}.png">
+    <img class="logo" src="{{ assets_dir }}/logo.png">
+    {% if photo %}<img class="photo" src="{{ assets_dir }}/{{ photo }}">{% endif %}
+  </div>
+
+  <div class="title-block">
+    <div class="doc-label">Technical Data Sheet</div>
+    <div class="sku">{{ sku }}</div>
+    <div class="product-name">{{ product_name }}</div>
+  </div>
+
+  <div class="body">
+    <div class="col-left">
+      <div class="intro">{{ intro }}</div>
+
+      <h2 class="section">Features</h2>
+      <ul class="bullets">
+        {% for item in features %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+
+      <h2 class="section">Applications</h2>
+      {% if applications_lead %}<p class="lead">{{ applications_lead }}</p>{% endif %}
+      <ul class="bullets">
+        {% for item in applications %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </div>
+
+    <div class="col-right">
+      {% if substrates %}
+      <h2 class="section" style="margin-top:0">Substrates</h2>
+      {% if substrates_lead %}<p class="lead">{{ substrates_lead }}</p>{% endif %}
+      <ul class="bullets">
+        {% for item in substrates %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+
+      <h2 class="section"{% if not substrates %} style="margin-top:0"{% endif %}>Technical Data</h2>
+      <div class="techdata-head"><div class="c1">Properties</div><div class="c2">Value</div></div>
+      {% for row in tech_data %}
+      <div class="techdata-row"><div class="c1">{{ row[0] }}</div><div class="c2">{{ row[-1] }}</div></div>
+      {% endfor %}
+
+      {% if packaging %}
+      <h2 class="section">Packaging</h2>
+      <div class="packaging-boxes">
+        {% for p in packaging %}<div class="pack-box">{{ p }}</div>{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if recommended_equipment %}
+      <h2 class="section">Recommended Equipment</h2>
+      <ul class="bullets">
+        {% for item in recommended_equipment %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+
+  {% include "_footer.html.j2" %}
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+  <div class="watermark"><img src="{{ assets_dir }}/watermark.png"></div>
+
+  <div class="body" style="padding-top:28px;">
+    <div class="col-left">
+      {% for block in left_sections %}
+      <h2 class="section"{% if loop.first %} style="margin-top:0"{% endif %}>{{ block.title }}</h2>
+      {% for para in block.paragraphs %}<p>{{ para }}</p>{% endfor %}
+      {% if block.title == "Application Instructions" and bead_chart %}
+      <h2 class="section">Bead Chart</h2>
+      <div class="techdata-head"><div class="c1">Bead Width</div><div class="c2">Linear Yield / oz</div></div>
+      {% for row in bead_chart %}
+      <div class="techdata-row"><div class="c1">{{ row[0] }}</div><div class="c2">{{ row[1] }}</div></div>
+      {% endfor %}
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="col-right">
+      <h2 class="section" style="margin-top:0">Precautionary Information</h2>
+      {% if precautionary.confirmed %}
+        {% if precautionary.statements %}
+          {% for s in precautionary.statements %}<p>{{ s }}</p>{% endfor %}
+        {% else %}
+          <p>{{ precautionary.text }}</p>
+        {% endif %}
+      {% else %}
+      <div class="precaution-box"><span class="needs-confirm">{{ precautionary.text }}</span></div>
+      {% endif %}
+
+      <h2 class="section">Information</h2>
+      <div class="info-block">
+        <p><b>Technical Information:</b> The technical data provided is based on
+        laboratory testing and is believed to be reliable; however, it is offered for
+        informational purposes only. Actual performance will vary depending on
+        substrate, application technique, and environmental conditions.</p>
+        <p><b>Product Selection Use:</b> Many factors beyond Forza's control can affect
+        product performance. Users are responsible for evaluating the product and
+        determining suitability for their specific application, including testing under
+        actual service conditions.</p>
+        <p><b>Limitation Liability:</b> To the extent permitted by law, Forza shall not
+        be liable for any indirect, incidental, or consequential damages arising from
+        the use or inability to use this product.</p>
+        <p><b>Disclaimer:</b> This product is intended for industrial and professional
+        use. Users must follow all product instructions, warnings, and applicable
+        safety regulations. Improper use may result in injury, property damage, or
+        product failure.</p>
+      </div>
+    </div>
+  </div>
+
+  {% include "_footer.html.j2" %}
+</div>
+
+</body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "sku": "T461",
+  "vertical": "industrial",
+  "product_name": "Synthetic Rubber Transfer Tape",
+  "intro": "ForzaTAPE® T461 is an extremely aggressive heavy coat weight synthetic rubber transfer tape with a natural kraft liner. It is designed for mounting and bonding insulation panels, trim, and edging applications.",
+  "features": [
+    "Extremely aggressive synthetic rubber adhesive",
+    "Heavy coat weight — 20 mil adhesive thickness",
+    "High peel adhesion — 7.5 lbs @ 1 mil/in of width",
+    "Natural kraft liner for easy handling and release",
+    "Transfer tape construction — no carrier, for clean lamination",
+    "Wide application temperature range: 50°F – 105°F",
+    "Shelf life: 12 months from manufacture"
+  ],
+  "applications_lead": "ForzaTAPE® T461 is specifically designed for:",
+  "applications": [
+    "Mounting and bonding insulation panels to a variety of substrates",
+    "Fixing edging, trim, and decorative panels",
+    "Bonding signage and display components",
+    "General laminating and mounting in insulation applications"
+  ],
+  "substrates_lead": "ForzaTAPE® T461 is used to mount and bond:",
+  "substrates": [
+    "Insulation panels",
+    "Trim and edging components",
+    "Decorative panels",
+    "Signage and display components"
+  ],
+  "tech_data": [
+    ["Adhesive Type", "Synthetic Rubber"],
+    ["Carrier", "None — Transfer Tape"],
+    ["Adhesive Thickness", "20 mils"],
+    ["Liner", "Natural Kraft"],
+    ["Liner Thickness", "3.2 mils"],
+    ["Peel Adhesion", "7.5 lbs @ 1 mil/in width"],
+    ["Application Temp Range", "50°F – 105°F"],
+    ["Shelf Life", "12 months"]
+  ],
+  "packaging": ["3/4\" x 100'", "1-1/2\" x 100'", "2\" x 100'"],
+  "left_sections": [
+    {
+      "title": "Surface Preparation",
+      "paragraphs": [
+        "Ensure substrate is clean and dry and free from dust, dirt, oil, wax, or silicone.",
+        "Allow any cleaning solvents to fully evaporate before applying the tape to ensure optimal adhesion."
+      ]
+    },
+    {
+      "title": "Application Instructions",
+      "paragraphs": [
+        "Apply the tape to the part to be bonded, ensuring that no air is trapped between the tape and the substrate. Apply adequate pressure using a J roller, using a recommended application pressure of 15 pounds per inch of tape width, and apply with care to avoid wrinkles or trapped air.",
+        "At the point of final assembly or lamination, remove the release liner and apply with care to avoid wrinkles or trapped air.",
+        "Bond strength continues to build over the hours following application as the adhesive fully wets out the substrate, so allow adequate dwell time before placing the assembly into service."
+      ]
+    },
+    {
+      "title": "Clean Up Information",
+      "paragraphs": [
+        "Unapplied tape may be removed cleanly from surfaces. Any adhesive residue can be removed using isopropyl alcohol, mineral spirits, or an appropriate adhesive remover. Once the adhesive has fully bonded, removal may require mechanical methods such as scraping or abrasion."
+      ]
+    },
+    {
+      "title": "Storage & Disposal",
+      "paragraphs": [
+        "Store material in original unopened packaging at temperatures between 40°F and 100°F. Shelf life is 12 months when stored as recommended.",
+        "Dispose of in accordance with all applicable local, state, and federal regulations."
+      ]
+    }
+  ],
+  "precautionary": {
+    "confirmed": true,
+    "text": "This product is classified as Non-Hazardous under GHS."
+  },
+  "substrate_table": null,
+  "photo": "C-T731.png"
+}

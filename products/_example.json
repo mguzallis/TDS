@@ -1,0 +1,48 @@
+{
+  "sku": "XXXX",
+  "vertical": "insulation",
+  "_vertical_note": "Lowercase, must match a file in assets/headers/ (insulation, industrial, transportation, marine, construction). Picks the header gradient color for this product's market segment — confirmed these differ per vertical by comparing real shipped catalog files.",
+
+  "product_name": "Product Type Name",
+  "intro": "One or two sentence product description.",
+  "features": ["Feature one", "Feature two"],
+  "applications_lead": "Product is specifically designed for:",
+  "applications": ["Application one", "Application two"],
+  "substrates_lead": "Product is used to bond:",
+  "substrates": ["Substrate one", "Substrate two"],
+  "_substrates_note": "Set substrates to null to omit the Substrates section entirely (e.g. for non-structural products).",
+
+  "tech_data": [
+    ["Property Name", "Value"]
+  ],
+  "_tech_data_note": "Two columns only (Properties/Value) — this matches the actual shipped 177-product catalog, not the 3-column Test Method/zebra-striped variant piloted during the IC947/M-OS764/T310 mockup round, which was never adopted catalog-wide. Each row renders as a solid navy bar, matching the real template exactly.",
+
+  "packaging": ["Size one", "Size two"],
+
+  "product_type": "tape",
+  "_product_type_note": "One of: tape, canister, cartridge. Determines which optional sections apply (see RULES.md section 12) — tape gets 'Clean Up Information' in left_sections; canister gets recommended_equipment on page 1; cartridge (MS/sealant) gets bead_chart on page 2. This field isn't read by generate_tds.py directly (the optional fields below are what actually drive the template) — it's bookkeeping for the app's UI and for future-you to know which shape a product is.",
+
+  "recommended_equipment": null,
+  "_recommended_equipment_note": "Canister products only (confirmed via IC947). A bullet list rendered as a 'Recommended Equipment' section on page 1, right column, right after Packaging. Leave null for tape/cartridge products.",
+
+  "bead_chart": null,
+  "_bead_chart_note": "MS/cartridge sealant products only (confirmed via M-OS764). A list of [bead width, linear yield] pairs, e.g. [[\"1/8\\\"\", \"154 ft\"], [\"3/16\\\"\", \"68 ft\"]]. Renders as a 'Bead Chart' section on page 2, left column, immediately after Application Instructions and before Clean Up Information/Storage & Disposal. Leave null for tape/canister products.",
+
+  "left_sections": [
+    {"title": "Surface Preparation", "paragraphs": ["..."]},
+    {"title": "Application Instructions", "paragraphs": ["..."]},
+    {"title": "Clean Up Information", "paragraphs": ["..."]},
+    {"title": "Storage & Disposal", "paragraphs": ["..."]}
+  ],
+  "_left_sections_note": "Tape products include 'Clean Up Information' between Application Instructions and Storage & Disposal (confirmed against real tape-category shipped files) — omit that section for non-tape products unless it genuinely applies.",
+
+  "precautionary": {
+    "_note": "Tape products default to the confirmed, non-flagged GHS statement below (verified verbatim against real shipped files) — do not render it as a flagged placeholder. Canister/cartridge products with actual GHS hazard classifications should instead use a 'statements' list (each its own sentence, e.g. hazard + precautionary statements pulled from the SDS and reviewed by a human — never auto-populated from an SDS upload without explicit confirmation) in place of 'text'. If a product's classification genuinely isn't confirmed yet, set confirmed:false and it renders as a flagged orange placeholder instead of asserting one.",
+    "confirmed": true,
+    "text": "This product is classified as Non-Hazardous under GHS.",
+    "statements": null
+  },
+
+  "photo": null,
+  "_photo_note": "Filename of a real product photo placed in assets/, shown in the header. Leave null rather than reuse another SKU's photo/material/color."
+}
