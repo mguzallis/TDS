@@ -3,3 +3,4 @@ playwright
 qrcode[pil]
 pymupdf
 streamlit
+requests

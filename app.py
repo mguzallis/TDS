@@ -30,6 +30,7 @@ from generate_tds import (  # noqa: E402
     build,
     PRECAUTION_SDS_REFERRAL,
     PRECAUTION_NON_HAZARDOUS,
+    precaution_paragraph,
 )
 
 ASSETS_DIR = ROOT / "assets"
@@ -64,6 +65,12 @@ def list_verticals():
     return names or ["insulation"]
 
 
+def list_brands():
+    """Brand lines that have a logo_<brand>.png in assets/ (tape, bond, ...)."""
+    names = sorted(p.stem.replace("logo_", "", 1) for p in ASSETS_DIR.glob("logo_*.png"))
+    return names or ["tape"]
+
+
 def list_products():
     if not PRODUCTS_DIR.exists():
         return []
@@ -86,6 +93,71 @@ def lines_to_list(text):
 
 def list_to_lines(items):
     return "\n".join(items or [])
+
+
+# ---------------------------------------------------------------------------
+# Source-of-truth draft saving. Apps never write to the approved master
+# (data/); they only add or replace one row in drafts/tds.csv through the
+# shared helper tools/master_repo.py (copied in unchanged). The owner
+# approves drafts. Needs GITHUB_TOKEN in the app's Secrets.
+# ---------------------------------------------------------------------------
+sys.path.insert(0, str(ROOT / "tools"))
+
+_SECTION_TO_COLUMN = {
+    "Surface Preparation": "Surface Preparation",
+    "Application Instructions": "Application Instructions",
+    "Clean Up Information": "Clean Up Information",
+    "Storage & Disposal": "Storage",
+}
+
+
+def build_master_row(data):
+    """Map this app's product JSON onto the exact columns of the `tds` tab."""
+    def lines(items):
+        return "\n".join(i for i in (items or []) if i)
+
+    row = {
+        "Category": (data.get("vertical") or "").title(),
+        "Product Code": data["sku"],
+        "Brand Line": (data.get("brand") or "").upper(),
+        # Product Type and TDS Title both hold the exact title printed on the TDS.
+        "Product Type": data["product_name"],
+        "TDS Title": data["product_name"],
+        "Description": data["intro"],
+        "Features": lines(data.get("features")),
+        "Applications Intro": data.get("applications_lead") or "",
+        "Applications": lines(data.get("applications")),
+        "Substrates Intro": data.get("substrates_lead") or "",
+        "Substrates": lines(data.get("substrates")),
+        "Technical Data Table": "\n".join(f"{p}: {v}" for p, v in data.get("tech_data", []) if p),
+        "Packaging": lines(data.get("packaging")),
+        "Precautionary Information": (data.get("precautionary") or {}).get("text", ""),
+    }
+    if data.get("recommended_equipment") is not None:
+        row["Recommended Equipment"] = lines(data["recommended_equipment"])
+    for sec in data.get("left_sections", []):
+        col = _SECTION_TO_COLUMN.get(sec["title"])
+        if col:
+            row[col] = "\n".join(sec["paragraphs"])
+    return row
+
+
+def save_tds_draft(data):
+    """Save one draft row to the source of truth. Returns (status, error)."""
+    try:
+        import master_repo
+    except Exception as e:  # helper missing
+        return None, f"GitHub helper not available: {e}"
+    row = build_master_row(data)
+    try:
+        approved = {m.get("Product Code") for m in master_repo.read_master("tds")}
+        if row["Product Code"] in approved:
+            # Existing product: keep the master's Category / Brand Line.
+            row.pop("Category", None)
+            row.pop("Brand Line", None)
+        return master_repo.save_draft("tds", row, who="TDS Builder"), None
+    except Exception as e:
+        return None, str(e)
 
 
 def extract_candidate_statements(pdf_bytes):
@@ -222,20 +294,108 @@ st.caption(
 )
 
 # ---------------------------------------------------------------------------
-# Start from: new product, or load an existing one to edit
+# Start from: a new TDS, or edit an existing one. Existing TDSs come from the
+# approved master sheet (data/tds.csv in the product-data repo); if the master
+# can't be reached, it falls back to the product JSON files in products/.
 # ---------------------------------------------------------------------------
-existing = list_products()
-col_a, col_b = st.columns([2, 1])
-with col_a:
-    choice = st.selectbox(
-        "Start from",
-        ["New product"] + [f"Edit existing: {sku}" for sku in existing],
-    )
+_COLUMN_TO_SECTION = {v: k for k, v in _SECTION_TO_COLUMN.items()}
+
+
+@st.cache_data(ttl=300, show_spinner="Loading TDS list from the master sheet...")
+def load_master_tds():
+    import master_repo
+    return master_repo.read_master("tds")
+
+
+def _split_lines(text):
+    return [l.strip() for l in (text or "").splitlines() if l.strip()]
+
+
+def _infer_product_type(row):
+    pkg = (row.get("Packaging") or "").lower()
+    if (row.get("Brand Line") or "").upper() == "TAPE" or "roll" in pkg:
+        return "tape"
+    if any(w in pkg for w in ("cartridge", "sausage", "tube")):
+        return "cartridge"
+    if "canister" in pkg or "cylinder" in pkg:
+        return "canister"
+    return "bulk"
+
+
+def master_row_to_loaded(row):
+    """Inverse of build_master_row: master row -> the builder's product JSON shape."""
+    code = row.get("Product Code", "")
+    local = PRODUCTS_DIR / f"{code}.json"
+    data = json.loads(local.read_text()) if local.exists() else {}
+    verticals_ = [v.lower() for v in list_verticals()]
+    cat = (row.get("Category") or "").lower()
+    tech = []
+    for line in _split_lines(row.get("Technical Data Table")):
+        p, _, v = line.partition(": ")
+        tech.append([p.strip(), v.strip()])
+    sections = []
+    for col, title in _COLUMN_TO_SECTION.items():
+        paras = _split_lines(row.get(col))
+        if paras:
+            sections.append({"title": title, "paragraphs": paras})
+    order = ["Surface Preparation", "Application Instructions", "Clean Up Information", "Storage & Disposal"]
+    sections.sort(key=lambda s_: order.index(s_["title"]))
+    data.update({
+        "sku": code,
+        "product_name": row.get("TDS Title") or row.get("Product Type") or data.get("product_name", ""),
+        "intro": row.get("Description", ""),
+        "features": _split_lines(row.get("Features")),
+        "applications_lead": row.get("Applications Intro", ""),
+        "applications": _split_lines(row.get("Applications")),
+        "substrates_lead": row.get("Substrates Intro", ""),
+        "substrates": _split_lines(row.get("Substrates")),
+        "tech_data": tech,
+        "packaging": _split_lines(row.get("Packaging")),
+        "left_sections": sections,
+    })
+    if cat in verticals_:
+        data["vertical"] = cat
+    brand_ = (row.get("Brand Line") or "").lower()
+    if brand_:
+        data["brand"] = brand_
+    data.setdefault("product_type", _infer_product_type(row))
+    eq = _split_lines(row.get("Recommended Equipment"))
+    if eq:
+        data["recommended_equipment"] = eq
+    prec = row.get("Precautionary Information")
+    if prec:
+        data["precautionary"] = {**(data.get("precautionary") or {}), "confirmed": True, "text": prec}
+    return data
+
+
+start_mode = st.radio(
+    "What would you like to do?",
+    ["Create a new TDS", "Edit an existing TDS"],
+    horizontal=True,
+)
 
 loaded = {}
-if choice != "New product":
-    sku_to_load = choice.replace("Edit existing: ", "")
-    loaded = json.loads((PRODUCTS_DIR / f"{sku_to_load}.json").read_text())
+if start_mode == "Edit an existing TDS":
+    master_rows, master_err = [], None
+    try:
+        master_rows = load_master_tds()
+    except Exception as e:
+        master_err = str(e)
+    if master_rows:
+        by_code = {r["Product Code"]: r for r in master_rows if r.get("Product Code")}
+        label = lambda c: f"{c} - {by_code[c].get('TDS Title') or by_code[c].get('Product Type', '')}"
+        pick = st.selectbox("Select a TDS from the master sheet", sorted(by_code), format_func=label)
+        loaded = master_row_to_loaded(by_code[pick])
+        st.caption(f"Loaded {pick} from the master sheet. Edit anything below, then generate the PDF or save it as a draft.")
+    else:
+        if master_err:
+            st.warning(f"Couldn't reach the master sheet ({master_err}). Showing the products saved in this app instead.")
+        local_products = list_products()
+        if local_products:
+            pick = st.selectbox("Select a saved product", local_products)
+            loaded = json.loads((PRODUCTS_DIR / f"{pick}.json").read_text())
+        else:
+            st.info("No saved products found. Switch to 'Create a new TDS'.")
 
 # ---------------------------------------------------------------------------
 # Product type — outside the form so picking it immediately reveals the
@@ -244,8 +404,8 @@ if choice != "New product":
 # cartridge/MS-only). See RULES.md section 12.
 # ---------------------------------------------------------------------------
 st.subheader("Product type")
-PRODUCT_TYPE_LABELS = ["Tape", "Canister", "MS / Cartridge Sealant"]
-_PRODUCT_TYPE_TO_LABEL = {"tape": "Tape", "canister": "Canister", "cartridge": "MS / Cartridge Sealant"}
+PRODUCT_TYPE_LABELS = ["Tape", "Canister", "Pail / Drum / Tote (bulk)", "MS / Cartridge Sealant"]
+_PRODUCT_TYPE_TO_LABEL = {"tape": "Tape", "canister": "Canister", "bulk": "Pail / Drum / Tote (bulk)", "cartridge": "MS / Cartridge Sealant"}
 _LABEL_TO_PRODUCT_TYPE = {v: k for k, v in _PRODUCT_TYPE_TO_LABEL.items()}
 default_product_type_label = _PRODUCT_TYPE_TO_LABEL.get(loaded.get("product_type", "tape"), "Tape")
 product_type_label = st.selectbox(
@@ -254,8 +414,8 @@ product_type_label = st.selectbox(
     index=PRODUCT_TYPE_LABELS.index(default_product_type_label),
 )
 st.caption(
-    "Tape → includes a Clean Up Information section. Canister → adds a Recommended "
-    "Equipment section on page 1. MS / Cartridge Sealant → adds a Bead Chart table on "
+    "Tape → includes a Clean Up Information section. Canister and Pail / Drum / Tote → add a "
+    "Recommended Equipment section on page 1. MS / Cartridge Sealant → adds a Bead Chart table on "
     "page 2, right after Application Instructions."
 )
 is_tape = product_type_label == "Tape"
@@ -335,6 +495,14 @@ with st.form("tds_form"):
     with c1:
         sku = st.text_input("SKU", value=loaded.get("sku", ""))
     with c2:
+        brands = list_brands()
+        default_brand = loaded.get("brand", "tape")
+        brand = st.selectbox(
+            "Brand line (picks the logo)",
+            brands,
+            index=brands.index(default_brand) if default_brand in brands else 0,
+            format_func=lambda b: f"Forza{b.upper()}",
+        )
         verticals = list_verticals()
         default_vertical = loaded.get("vertical", "insulation")
         vertical = st.selectbox(
@@ -400,7 +568,7 @@ with st.form("tds_form"):
 
     recommended_equipment_text = ""
     bead_chart_rows = None
-    if product_type_label == "Canister":
+    if product_type_label in ("Canister", "Pail / Drum / Tote (bulk)"):
         st.subheader("Recommended Equipment")
         recommended_equipment_text = st.text_area(
             "Recommended equipment (one per line) — appears on page 1, right after Packaging",
@@ -467,11 +635,12 @@ with st.form("tds_form"):
         existing_photo_choice = st.selectbox("Existing photo", photos) if photos else None
 
     submitted = st.form_submit_button("Generate TDS PDF", type="primary")
+    save_clicked = st.form_submit_button("Save as draft")
 
 # ---------------------------------------------------------------------------
 # Handle submission
 # ---------------------------------------------------------------------------
-if submitted:
+if submitted or save_clicked:
     if not sku.strip():
         st.error("SKU is required.")
         st.stop()
@@ -485,9 +654,10 @@ if submitted:
         photo_filename = existing_photo_choice
 
     if precaution_choice == "Use reviewed SDS extract (shown above)":
+        # Shipped catalog format: ONE run-on lower-case paragraph (81-0389, C804, IC947).
         precautionary = {
             "confirmed": True,
-            "statements": lines_to_list(st.session_state.get("_sds_extracted_text", "")),
+            "text": precaution_paragraph(lines_to_list(st.session_state.get("_sds_extracted_text", ""))),
         }
     elif precaution_choice.startswith("Non-Hazardous"):
         precautionary = {"confirmed": True, "text": PRECAUTION_NON_HAZARDOUS}
@@ -514,7 +684,8 @@ if submitted:
     ]
 
     recommended_equipment = (
-        lines_to_list(recommended_equipment_text) if product_type_label == "Canister" else None
+        lines_to_list(recommended_equipment_text)
+        if product_type_label in ("Canister", "Pail / Drum / Tote (bulk)") else None
     )
     bead_chart = None
     if product_type_label == "MS / Cartridge Sealant" and bead_chart_rows:
@@ -527,6 +698,7 @@ if submitted:
     data = {
         "sku": sku.strip(),
         "vertical": vertical,
+        "brand": brand,
         "product_type": _LABEL_TO_PRODUCT_TYPE[product_type_label],
         "product_name": product_name.strip(),
         "intro": intro.strip(),
@@ -543,6 +715,17 @@ if submitted:
         "precautionary": precautionary,
         "photo": photo_filename,
     }
+
+    if save_clicked and not submitted:
+        if not data["product_name"]:
+            st.error("Product name is required to save a draft (it becomes the TDS title).")
+            st.stop()
+        status, err = save_tds_draft(data)
+        if err:
+            st.error(f"Could not save draft: {err}")
+        else:
+            st.success(f"Draft {status} for {data['sku']}. It is waiting for the owner's approval.")
+        st.stop()
 
     product_path = PRODUCTS_DIR / f"{sku.strip()}.json"
     product_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
