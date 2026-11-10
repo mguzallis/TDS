@@ -352,3 +352,5 @@ of truth when a SKU is in it).
 - Section text boxes use keys namespaced by start mode + SKU + uploaded file, so switching products never leaves page-2 boxes empty or stale.
 - Tape products use the standard storage boilerplate; non-tape products require the SDS upload for Storage & Disposal.
 - "(Forza Test Method)" is NOT added to Technical Data labels, except T205, T215, T220 and their crosses (C-T550/553/557, M-T815/820, T-T246, T-T415/420). Stripped automatically in the app and generator. A separate test-method column will come later.
+- Product photos: the repo holds each product's current TDS photo in assets/photos/<SKU>.png (extracted from the shipped English TDSs, 520 px). The Header photo choices are ONLY "Use the photo from the existing TDS" (an uploaded TDS's photo wins over the library) or "Upload new". No generic "existing asset" list. If no photo exists, the TDS builds without one and the app warns.
+- Every ForzaBOND, ForzaSEAL or ForzaTAPE in print gets the registered mark (circled R), including the Substrates intro, Application Instructions, FAQ and any other text. The generator adds it automatically and the master CSV was updated Nov 10 2026.

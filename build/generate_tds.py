@@ -19,6 +19,7 @@ First time only: playwright install chromium
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -116,6 +117,20 @@ def verify_two_pages(pdf_path: Path):
 FTM_KEEP = {"T205", "T215", "T220", "C-T550", "C-T553", "C-T557", "M-T815", "M-T820", "T-T246", "T-T415", "T-T420"}
 
 
+_REG = re.compile(r"(Forza\s?(?:BOND|SEAL|TAPE))(?!\s?\u00ae)", re.I)
+
+
+def add_reg(obj):
+    """Every ForzaBOND / ForzaSEAL / ForzaTAPE in print gets a registered mark."""
+    if isinstance(obj, str):
+        return _REG.sub(lambda m: m.group(1) + "\u00ae", obj)
+    if isinstance(obj, list):
+        return [add_reg(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: (v if k in ("sku", "photo", "vertical", "brand", "product_type") else add_reg(v)) for k, v in obj.items()}
+    return obj
+
+
 def strip_ftm(data):
     if data.get("sku") in FTM_KEEP:
         return data
@@ -125,7 +140,7 @@ def strip_ftm(data):
 
 
 def build(product_path: Path, out_path: Path | None = None, photo: str | None = None):
-    data = strip_ftm(json.loads(product_path.read_text()))
+    data = add_reg(strip_ftm(json.loads(product_path.read_text())))
     ensure_qr()
 
     env = Environment(loader=FileSystemLoader(str(BUILD_DIR)))
