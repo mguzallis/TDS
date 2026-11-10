@@ -344,3 +344,10 @@ of truth when a SKU is in it).
   stored values stay lower-case because they match file names in assets/headers.
 - Substrates wording: "seal"/"prime" instead of "bond" applies only to
   sealants, certain tapes and primers -- it is not a rule for every product.
+
+## 19. Brand line, auto-fit spacing, photo pull, widget keys (Nov 10 2026)
+- Brand line (Bond / Seal / Tape) is the FIRST field in Basics. It picks the header logo: assets/logo_bond.png, logo_tape.png, logo_seal.png. All three files must exist in the repo or the build stops with a message listing the logos it found. Seal logo has its own CSS (.header .logo.seal).
+- Spacing is automatic: standard -> compact -> tight. The first level that fits on 2 pages is used. The hard 2-page gate (verify_two_pages) never changes. If even "tight" runs over, trim copy.
+- Uploading an existing TDS PDF also pulls its product photo (offered first in the Photo section). Saving stores it as assets/<sku>.png.
+- Section text boxes use keys namespaced by start mode + SKU + uploaded file, so switching products never leaves page-2 boxes empty or stale.
+- Tape products use the standard storage boilerplate; non-tape products require the SDS upload for Storage & Disposal.

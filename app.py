@@ -249,6 +249,50 @@ def standard_bead_chart():
     return rows
 
 
+def extract_product_photo(pdf_bytes):
+    """Pull the header product photo out of an existing TDS (PDF) as PNG bytes
+    with its transparency, or None if the sheet has no product photo."""
+    import io
+    import pymupdf
+    from PIL import Image
+
+    doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        page = doc[0]
+        best = None
+        for im in page.get_images(full=True):
+            xref, smask, w, h = im[0], im[1], im[2], im[3]
+            if w < 200 or h < 200:
+                continue
+            rects = page.get_image_rects(xref)
+            if not rects:
+                continue
+            r = rects[0]
+            # header photo: upper right, not the full-width header art, logo or watermark
+            if r.width > 400 or r.x1 < 350 or r.y0 > 260 or r.y1 < 100:
+                continue
+            if best is None or w * h > best[2] * best[3]:
+                best = (xref, smask, w, h)
+        if best is None:
+            return None
+        xref, smask, _, _ = best
+        pm = pymupdf.Pixmap(doc, xref)
+        if pm.colorspace is None or pm.colorspace.n != 3:
+            pm = pymupdf.Pixmap(pymupdf.csRGB, pm)
+        if pm.alpha:
+            pm = pymupdf.Pixmap(pm, 0)
+        img = Image.frombytes("RGB", (pm.width, pm.height), pm.samples).convert("RGBA")
+        if smask:
+            mask = pymupdf.Pixmap(doc, smask)
+            img.putalpha(Image.frombytes("L", (mask.width, mask.height), mask.samples))
+        img.thumbnail((1600, 1600))
+        out = io.BytesIO()
+        img.save(out, "PNG", optimize=True)
+        return out.getvalue()
+    finally:
+        doc.close()
+
+
 def extract_storage_disposal(pdf_bytes):
     """Pull the Storage & Disposal language verbatim from an SDS PDF.
 
@@ -540,6 +584,10 @@ tds_upload = st.file_uploader(
 if tds_upload is not None:
     if st.session_state.get("_tds_uploader_name") != tds_upload.name:
         st.session_state["_tds_extracted_fields"] = extract_tds_fields(tds_upload.getvalue())
+        try:
+            st.session_state["_tds_photo"] = extract_product_photo(tds_upload.getvalue())
+        except Exception:
+            st.session_state["_tds_photo"] = None
         st.session_state["_tds_uploader_name"] = tds_upload.name
     st.caption(
         "Pre-filled the fields below where it could find a recognizable section — a "
@@ -551,6 +599,21 @@ if tds_upload is not None:
 # over a vendor TDS pull; the vendor TDS only fills in for a new product.
 _tds_extracted = st.session_state.get("_tds_extracted_fields", {}) if tds_upload is not None else {}
 loaded = {**_tds_extracted, **loaded}
+tds_photo = st.session_state.get("_tds_photo") if tds_upload is not None else None
+
+# Widget state key namespace. Streamlit keeps a keyed widget's value for the
+# life of the session, so without this the Page 2 boxes (Surface Preparation,
+# Application Instructions, ...) stayed blank after picking an existing
+# product. Every time the loaded product or uploaded TDS changes, the
+# namespace changes and those boxes pick up the new product's text.
+import hashlib
+_ns_src = f"{start_mode}|{loaded.get('sku', '')}|{tds_upload.name if tds_upload is not None else ''}"
+ns = hashlib.md5(_ns_src.encode()).hexdigest()[:8]
+
+
+def sec_key(title):
+    return f"section_{title}__{ns}"
+
 
 # ---------------------------------------------------------------------------
 # SDS upload — also outside the form so the extracted text appears
@@ -561,13 +624,17 @@ loaded = {**_tds_extracted, **loaded}
 # so this is disabled while "Tape" is the selected product type.
 # ---------------------------------------------------------------------------
 _last_type = st.session_state.get("_last_product_type")
-if _last_type != product_type_label:
-    _sd_key = "section_Storage & Disposal"
+_sd_key = sec_key("Storage & Disposal")
+_loaded_has_storage = any(sec.get("title") == "Storage & Disposal" for sec in loaded.get("left_sections", []))
+if _last_type is None:
+    if is_tape and _sd_key not in st.session_state and not _loaded_has_storage:
+        st.session_state[_sd_key] = TAPE_STORAGE_BOILERPLATE
+elif _last_type != product_type_label:
     if is_tape:
         st.session_state[_sd_key] = TAPE_STORAGE_BOILERPLATE
     elif _last_type == "Tape" and st.session_state.get(_sd_key) == TAPE_STORAGE_BOILERPLATE:
         st.session_state[_sd_key] = ""
-    st.session_state["_last_product_type"] = product_type_label
+st.session_state["_last_product_type"] = product_type_label
 
 st.subheader("Storage & Disposal from the SDS" + (" (not needed for tape)" if is_tape else " (required)"))
 if is_tape:
@@ -592,7 +659,7 @@ if sds_upload is not None:
         st.session_state["_sds_uploader_name"] = sds_upload.name
         st.session_state["_sds_storage"] = _storage
         st.session_state["_sds_disposal"] = _disposal
-        st.session_state["section_Storage & Disposal"] = " ".join(x for x in (_storage, _disposal) if x)
+        st.session_state[sec_key("Storage & Disposal")] = " ".join(x for x in (_storage, _disposal) if x)
     if not st.session_state.get("_sds_storage"):
         st.warning("Couldn't find the storage wording in SDS Section 7 - add it by hand in Storage & Disposal below.")
     if not st.session_state.get("_sds_disposal"):
@@ -605,18 +672,25 @@ if sds_upload is not None:
 # ---------------------------------------------------------------------------
 with st.form("tds_form"):
     st.subheader("Basics")
+    brands = list_brands()
+    _pref = [b_ for b_ in ("bond", "seal", "tape") if b_ in brands]
+    brands = _pref + [b_ for b_ in brands if b_ not in _pref]
+    default_brand = loaded.get("brand") or ("tape" if is_tape else "bond")
+    if default_brand not in brands:
+        st.warning(
+            f"The logo for Forza{default_brand.upper()} (assets/logo_{default_brand}.png) is missing from "
+            "the app's assets folder, so a different logo is selected. Upload that logo file to GitHub."
+        )
+    brand = st.selectbox(
+        "Brand line (picks the logo at the top of the sheet: ForzaBOND, ForzaSEAL or ForzaTAPE)",
+        brands,
+        index=brands.index(default_brand) if default_brand in brands else 0,
+        format_func=lambda b: f"Forza{b.upper()}",
+    )
     c1, c2 = st.columns(2)
     with c1:
         sku = st.text_input("SKU", value=loaded.get("sku", ""))
     with c2:
-        brands = list_brands()
-        default_brand = loaded.get("brand", "tape")
-        brand = st.selectbox(
-            "Brand line (picks the logo)",
-            brands,
-            index=brands.index(default_brand) if default_brand in brands else 0,
-            format_func=lambda b: f"Forza{b.upper()}",
-        )
         verticals = list_verticals()
         default_vertical = loaded.get("vertical", "insulation")
         vertical = st.selectbox(
@@ -671,7 +745,7 @@ with st.form("tds_form"):
         default_tech_rows,
         num_rows="dynamic",
         use_container_width=True,
-        key="tech_data_editor",
+        key=f"tech_data_editor__{ns}",
     )
 
     st.subheader("Packaging")
@@ -712,11 +786,11 @@ with st.form("tds_form"):
         _default = loaded_sections.get(title, "")
         if title == "Storage & Disposal" and is_tape and not _default:
             _default = TAPE_STORAGE_BOILERPLATE
-        _kw = {} if f"section_{title}" in st.session_state else {"value": _default}
+        _kw = {} if sec_key(title) in st.session_state else {"value": _default}
         section_texts[title] = st.text_area(
             title + " (blank lines separate paragraphs)",
             height=200 if title == "Storage & Disposal" else 100,
-            key=f"section_{title}",
+            key=sec_key(title),
             **_kw,
         )
 
@@ -736,11 +810,16 @@ with st.form("tds_form"):
         )
 
     st.subheader("Product photo")
-    photo_mode = st.radio(
-        "Header photo",
-        ["None", "Upload new", "Use existing asset"],
-        horizontal=True,
-    )
+    photo_options = ["None", "Upload new", "Use existing asset"]
+    if tds_photo:
+        photo_options = ["Photo from the uploaded TDS"] + photo_options
+        st.image(tds_photo, caption="Photo found on the uploaded TDS", width=170)
+    else:
+        st.caption(
+            "To carry over a product's current picture, upload its existing TDS in the pre-fill box near the top "
+            "of the page: the photo on it is pulled automatically."
+        )
+    photo_mode = st.radio("Header photo", photo_options, horizontal=True)
     uploaded_photo = None
     existing_photo_choice = None
     if photo_mode == "Upload new":
@@ -769,7 +848,10 @@ if submitted or save_clicked:
 
     # Resolve the photo filename, saving an uploaded file into assets/ first.
     photo_filename = None
-    if photo_mode == "Upload new" and uploaded_photo is not None:
+    if photo_mode == "Photo from the uploaded TDS" and tds_photo:
+        photo_filename = f"{sku.strip()}.png"
+        (ASSETS_DIR / photo_filename).write_bytes(tds_photo)
+    elif photo_mode == "Upload new" and uploaded_photo is not None:
         photo_filename = f"{sku.strip()}.png"
         (ASSETS_DIR / photo_filename).write_bytes(uploaded_photo.getvalue())
     elif photo_mode == "Use existing asset" and existing_photo_choice:
@@ -850,7 +932,11 @@ if submitted or save_clicked:
         st.error(f"Build failed: {e}")
         st.stop()
 
-    st.success(f"Built {out_path.name} — verified 2 pages at true US Letter.")
+    _layout = getattr(build, "last_layout", "standard")
+    st.success(
+        f"Built {out_path.name} — verified 2 pages at true US Letter "
+        + ("(standard spacing)." if _layout == "standard" else "(compact spacing, because standard spacing ran past 2 pages).")
+    )
 
     # Preview both pages.
     import pymupdf
