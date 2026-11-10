@@ -203,25 +203,26 @@ newest layer of rules, added to support non-tape product types:
   right optional fields for the chosen type, rather than requiring the
   user to know which JSON fields apply to their product.
 
-## 13. SDS-upload hazard/precautionary extraction
+## 13. SDS upload (Storage & Disposal only) -- UPDATED Nov 10 2026
 
-- The app lets the user upload the product's SDS (PDF) and heuristically
-  pull candidate Hazard Statement / Precautionary Statement text
-  (`extract_candidate_statements` in `app.py`: pymupdf text search for
-  those section labels, bounded by the next numbered SDS section or
-  another recognized label).
-- Extracted text is **never auto-confirmed** — it's surfaced in an
-  editable text area for the user to review, correct, and explicitly
-  confirm (a checkbox) before it's allowed to populate
-  `precautionary.statements` / `confirmed: true`. This follows the same
-  no-fabrication/sourcing discipline as the `tech_data` Test Method rule
-  in §14 — don't assert something as confirmed that a human hasn't
-  actually verified.
-- **Disabled entirely when Product type is "Tape"** — tape products don't
-  carry hazard statements; they use the confirmed non-hazardous boilerplate
-  from §10 instead, so there's nothing for this upload to meaningfully
-  extract. The uploader is grayed out and the "Use reviewed SDS extract"
-  precautionary option is hidden whenever Tape is selected.
+- Hazard/precautionary-statement extraction was REMOVED. Every TDS uses the
+  standard boilerplate in Precautionary Information ("refer to the product
+  label and Safety Data Sheet (SDS)"), so there is nothing to pull.
+- The SDS upload (any product type, optional) now fills **Storage & Disposal**
+  word for word from the SDS: the storage paragraph of SECTION 7 (Handling
+  and Storage) plus the body of SECTION 13 (Disposal Considerations)
+  (`extract_storage_disposal` in `app.py`). Only line breaks, page footers
+  and the leading field labels ("Storage:", "Waste treatment methods:")
+  are dropped; the wording must match the SDS verbatim. The field stays
+  editable and the app warns if Section 7 or 13 can't be found.
+- Default Precautionary Information option is "Requires SDS referral".
+- **Who needs the SDS:** any non-tape product (canister, pail/drum/tote,
+  MS/cartridge) must have its SDS uploaded to generate or save, unless an
+  existing product is loaded that already has Storage & Disposal text.
+  **Tape products have no SDS**: the uploader is not shown and Storage &
+  Disposal defaults to the standard tape language ("Store material in original
+  unopened packaging at temperatures between 40°F and 100°F. Shelf life is 12
+  months when stored as recommended."), editable per product (shelf life).
 
 ## 13b. Vendor/current TDS pre-fill (optional)
 
@@ -283,3 +284,63 @@ every existing product JSON (not just the one you're actively editing) and
 re-run `verify_two_pages` on all of them before considering the change
 done — a layout change that's fine for a short tape product can silently
 blow a longer canister/cartridge product past 2 pages.
+
+## 17. Corrections and additions from the FZD107 / ForzaBOND round
+
+Found by comparing against real shipped ForzaBOND files (81-0389 Pail,
+C804 Pail, IC947 Canister) and `Forza_TDS_Data_Master_with_FAQ_EN.csv`
+(the 177-product master data, with `Brand Line`, Packaging, Recommended
+Equipment, Precautionary Information etc. per SKU — use it as the source
+of truth when a SKU is in it).
+
+- **Precautionary Information for hazardous products is ONE run-on,
+  lower-case, comma-separated paragraph** (H/P codes stripped), not
+  separate paragraphs. This corrects §10/§12's earlier
+  `precautionary.statements` description. Use
+  `precaution_paragraph()` in `build/generate_tds.py` (the app now does
+  this for SDS-extracted text) and store the result in
+  `precautionary.text`. `statements` is still supported by the template
+  but should not be used for new products.
+- **Brand line picks the logo.** `"brand": "tape" | "bond"` in the
+  product JSON selects `assets/logo_<brand>.png` (ForzaTAPE / ForzaBOND).
+  ForzaBOND is used for adhesives incl. the Industrial canister IC947
+  (not ForzaEAGLE). Add a new brand by dropping `logo_<name>.png` in
+  `assets/` (extract from a shipped file, alpha restored).
+- ForzaBOND logo placement measured on IC947: PDF rect
+  (30.0,22.5)-(284.2,105.8)pt -> CSS `left:40px; top:30px; height:111px`.
+  NOTE (open question): the shipped ForzaTAPE logo (T325) measures
+  (28.5,20.2)-(288.0,108.0)pt, i.e. ~15% larger than our current tape
+  logo CSS (height 100px). Left unchanged because the tape header was
+  already approved; revisit if exact fidelity is wanted.
+- Catalog container types are wider than our 3 app types: Aerosol, Bottle,
+  Can, Canister, Cartridge, Drum, Pail, Pellet, Sausage, Tape, Tote. The
+  app now has a "Pail / Drum / Tote (bulk)" type (SDS upload enabled,
+  Recommended Equipment available, like Canister).
+- Content missing from a source sheet is omitted, never invented
+  (Surface Preparation, Clean Up Information, Substrates, Packaging,
+  Recommended Equipment, product photo were all absent from the old
+  FZD107 sheet and are left out until real data is supplied).
+- **`"compact": true`** (optional product flag) turns on a dense layout
+  (tighter bullet/row spacing, 2-up packaging grid) for long canister/pail
+  sheets that overflow 2 pages at default spacing (needed for FZD107 built
+  from IC933 content: 13 substrates + 9 tech rows + 5 packaging + equipment).
+  Off by default, so approved sheets (T461 etc.) are unchanged.
+- FZD107 (current `products/FZD107.json`) was built from IC933's content with
+  only Features/Applications replaced by FZD107's own. IC933-derived text
+  (description, substrates, tech data, packaging, equipment, instructions,
+  clean up, storage, precautionary) is NOT verified for FZD107. The earlier
+  FZD107-own-data version is kept as `products/_FZD107_own_data.json` and
+  `output/FZD107_own-data_TDS.pdf`.
+
+## 18. App look and dropdowns (Nov 10 2026)
+
+- The Streamlit app itself follows the Forza brand standards: Kallisto Heavy
+  headings (embedded from `assets/fonts/Kallisto_Heavy.otf`), Poppins body,
+  Regal Blue #1B3764 and Blaze Orange #F16022, and the eagle mark
+  (`assets/eagle_icon.png`, cropped from the Forza logo) in a navy header band.
+  This is the app UI only -- the PDF template colors in sections 2-3 are
+  unchanged (do not merge those navies with the brand blue).
+- Dropdown options show the first letter capitalized (e.g. "Industrial");
+  stored values stay lower-case because they match file names in assets/headers.
+- Substrates wording: "seal"/"prime" instead of "bond" applies only to
+  sealants, certain tapes and primers -- it is not a rule for every product.

@@ -30,7 +30,6 @@ from generate_tds import (  # noqa: E402
     build,
     PRECAUTION_SDS_REFERRAL,
     PRECAUTION_NON_HAZARDOUS,
-    precaution_paragraph,
 )
 
 ASSETS_DIR = ROOT / "assets"
@@ -38,7 +37,81 @@ PRODUCTS_DIR = ROOT / "products"
 OUTPUT_DIR = ROOT / "output"
 HEADERS_DIR = ASSETS_DIR / "headers"
 
-st.set_page_config(page_title="Forza TDS Generator", page_icon="📄", layout="wide")
+BRAND_NAVY = "#1B3764"    # Regal Blue (Brand Standards V6)
+BRAND_ORANGE = "#F16022"  # Blaze Orange (Brand Standards V6)
+
+# Tapes have no SDS, so Storage & Disposal uses this standard language
+# (same wording as the approved T461 tape sheet; change the shelf life per product).
+TAPE_STORAGE_BOILERPLATE = (
+    "Store material in original unopened packaging at temperatures between 40\u00b0F and 100\u00b0F. "
+    "Shelf life is 12 months when stored as recommended."
+)
+
+try:
+    from PIL import Image as _PILImage
+    _page_icon = _PILImage.open(ASSETS_DIR / "eagle_icon.png")
+except Exception:
+    _page_icon = "📄"
+st.set_page_config(page_title="Forza TDS Generator", page_icon=_page_icon, layout="wide")
+
+
+def apply_brand():
+    """Forza brand standards for the app itself: Kallisto Heavy headings,
+    Poppins body, Regal Blue / Blaze Orange, eagle logo header."""
+    import base64
+    try:
+        kal = base64.b64encode((ASSETS_DIR / "fonts" / "Kallisto_Heavy.otf").read_bytes()).decode()
+        eagle = base64.b64encode((ASSETS_DIR / "eagle_icon.png").read_bytes()).decode()
+    except Exception:
+        return
+    st.markdown(
+        f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+@font-face {{
+  font-family: 'Kallisto Heavy';
+  src: url(data:font/otf;base64,{kal}) format('opentype');
+  font-weight: 900; font-style: normal;
+}}
+html, body, [class*="css"], .stApp, .stMarkdown, label, p, li, input, textarea, select, button {{
+  font-family: 'Poppins', sans-serif;
+}}
+h1, h2, h3, h4, [data-testid="stHeading"] * {{
+  font-family: 'Kallisto Heavy', 'Poppins', sans-serif !important;
+  color: {BRAND_NAVY};
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}}
+h3 {{ border-bottom: 2px solid {BRAND_ORANGE}; padding-bottom: .25rem; }}
+.stApp a {{ color: {BRAND_ORANGE}; }}
+.stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {{
+  background: {BRAND_ORANGE}; border-color: {BRAND_ORANGE}; color: #fff; font-weight: 700;
+}}
+.stButton > button[kind="primary"]:hover, .stFormSubmitButton > button[kind="primary"]:hover {{
+  background: #d94f14; border-color: #d94f14;
+}}
+.stButton > button, .stFormSubmitButton > button {{ border-radius: 6px; }}
+.forza-header {{
+  background: {BRAND_NAVY}; border-bottom: 4px solid {BRAND_ORANGE};
+  border-radius: 8px; padding: 14px 22px; margin: -0.5rem 0 1.25rem 0;
+  display: flex; align-items: center; gap: 18px;
+}}
+.forza-header img {{ height: 64px; width: auto; }}
+.forza-header .t {{ font-family: 'Kallisto Heavy', 'Poppins', sans-serif; color: #fff;
+  font-size: 2rem; line-height: 1.1; font-weight: 900; }}
+.forza-header .s {{ color: #cfd8e8; font-size: .85rem; margin-top: 2px; }}
+</style>
+<div class="forza-header">
+  <img src="data:image/png;base64,{eagle}" alt="Forza eagle"/>
+  <div><div class="t">TDS Generator</div>
+  <div class="s">Purpose-built. Performance. Guaranteed strength.</div></div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+apply_brand()
 
 
 @st.cache_resource(show_spinner="Setting up PDF renderer (first run only)...")
@@ -160,41 +233,72 @@ def save_tds_draft(data):
         return None, str(e)
 
 
-def extract_candidate_statements(pdf_bytes):
-    """Heuristic pull of Hazard/Precautionary statement text from an SDS PDF.
+def standard_bead_chart():
+    """The one standard Bead Chart used on every cartridge/MS product.
 
-    This is intentionally rough — it searches for the section labels and
-    grabs the text up to the next likely section break. It is NEVER
-    auto-confirmed: the caller always surfaces this in an editable field
-    for a human to review against the actual SDS before it's used.
+    Pure geometry: 1 fl oz = 1.8046875 in^3, so linear yield = volume divided
+    by the cross-section of a round bead (pi * d^2 / 4). Matches the chart
+    printed on the shipped TDSs (1/8" = 12.25 ft ... 3/4" = 4.08 in).
+    """
+    import math
+    rows = []
+    for num, den in [(1, 8), (1, 4), (3, 8), (1, 2), (5, 8), (3, 4)]:
+        d = num / den
+        length_in = 1.8046875 / (math.pi * d * d / 4)
+        rows.append([f'{num}/{den}"', f"{length_in / 12:.2f} ft" if length_in >= 12 else f"{length_in:.2f} in"])
+    return rows
+
+
+def extract_storage_disposal(pdf_bytes):
+    """Pull the Storage & Disposal language verbatim from an SDS PDF.
+
+    Storage = the storage paragraph of SECTION 7 (Handling and Storage);
+    Disposal = the body of SECTION 13 (Disposal Considerations). The wording
+    is kept exactly as written in the SDS (only line breaks, page footers and
+    the leading field labels such as "Storage:" are removed) so the TDS and
+    SDS always match. Returns (storage, disposal) -- either may be "" if that
+    section/label isn't found, so the caller can warn the user.
     """
     import pymupdf
 
     doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
-    full_text = "\n".join(page.get_text() for page in doc)
+    text = "\n".join(page.get_text() for page in doc)
     doc.close()
+    # Drop page footers that land in the middle of a section.
+    text = re.sub(r"\n\s*Page\s+\d+\s+of\s+\d+\s*\n", "\n", text)
+    text = re.sub(r"\n\s*DCN:[^\n]*\n", "\n", text)
 
-    stop_patterns = [
-        r"\n\s*section\s*\d",
-        r"\n\s*\d+\.\d+\s+[A-Z]",
-        r"\n\s*(other hazards|classification|precautionary statements?|hazard statements?)\s*:?\s*\n",
-    ]
-
-    def grab(label_pattern):
-        m = re.search(label_pattern, full_text, re.IGNORECASE)
+    def section(start_pat, end_pat):
+        m = re.search(start_pat, text, re.IGNORECASE)
         if not m:
             return ""
-        rest = full_text[m.end():]
-        stop_idx = len(rest)
-        for sp in stop_patterns:
-            sm = re.search(sp, rest, re.IGNORECASE)
-            if sm and 0 < sm.start() < stop_idx:
-                stop_idx = sm.start()
-        return rest[:stop_idx].strip()
+        rest = text[m.end():]
+        e = re.search(end_pat, rest, re.IGNORECASE)
+        return rest[: e.start()] if e else rest
 
-    hazard = grab(r"hazard\s+statements?\s*:?\s*\n?")
-    precaution = grab(r"precautionary\s+statements?\s*:?\s*\n?")
-    return "\n".join(x for x in [hazard, precaution] if x)
+    def tidy(t):
+        return re.sub(r"\s+", " ", t).strip()
+
+    s7 = section(r"SECTION\s*7\s*[\u2013\u2014-]\s*Handling[^\n]*\n", r"SECTION\s*8\b")
+    s13 = section(r"SECTION\s*13\s*[\u2013\u2014-]\s*Disposal[^\n]*\n", r"SECTION\s*14\b")
+
+    storage = ""
+    m = re.search(r"(?:Conditions\s+for\s+safe\s+storage|Storage)\s*:\s*", s7, re.IGNORECASE)
+    if m:
+        body = s7[m.end():]
+        nxt = re.search(r"\n\s*[A-Z][A-Za-z/ ]{2,40}:\s", body)
+        storage = tidy(body[: nxt.start()] if nxt else body)
+
+    # Disposal: every paragraph of Section 13, minus the field label in front
+    # (e.g. "Waste treatment methods:") and pure waste-code lines.
+    label = r"^\s*(?:Waste\s+treatment(?:\s+methods?)?|Method|Waste\s+Disposal|Contaminated\s+packaging|Disposal)\s*:\s*"
+    parts = []
+    for line in s13.split("\n"):
+        if re.match(r"^\s*Waste\s+Code\s*:", line, re.IGNORECASE):
+            continue
+        parts.append(re.sub(label, "", line, flags=re.IGNORECASE))
+    disposal = tidy(" ".join(parts))
+    return storage, disposal
 
 
 # Section labels we know how to recognize in a vendor/competitor TDS, mapped
@@ -286,7 +390,6 @@ DEFAULT_SECTIONS = [
     "Storage & Disposal",
 ]
 
-st.title("Forza TDS Generator")
 st.caption(
     "Generates the real two-page Technical Data Sheet template (verified font, "
     "colors, watermark and footer placement against the shipped catalog) from a "
@@ -457,34 +560,45 @@ loaded = {**_tds_extracted, **loaded}
 # non-hazardous boilerplate (see RULES.md section 10) already covers them —
 # so this is disabled while "Tape" is the selected product type.
 # ---------------------------------------------------------------------------
-st.subheader("Extract hazard/precautionary statements from an SDS (optional)")
+_last_type = st.session_state.get("_last_product_type")
+if _last_type != product_type_label:
+    _sd_key = "section_Storage & Disposal"
+    if is_tape:
+        st.session_state[_sd_key] = TAPE_STORAGE_BOILERPLATE
+    elif _last_type == "Tape" and st.session_state.get(_sd_key) == TAPE_STORAGE_BOILERPLATE:
+        st.session_state[_sd_key] = ""
+    st.session_state["_last_product_type"] = product_type_label
+
+st.subheader("Storage & Disposal from the SDS" + (" (not needed for tape)" if is_tape else " (required)"))
 if is_tape:
     st.caption(
-        "Not applicable for Tape — ForzaTAPE products default to the confirmed "
-        "\"Non-Hazardous under GHS\" boilerplate and don't carry hazard statements. "
-        "Switch Product type above if this product actually needs an SDS."
+        "Tape products don't have an SDS, so Storage & Disposal below uses the standard tape language "
+        "(edit the shelf life if it differs). Switch the Product type above if this product does have an SDS."
     )
-sds_upload = st.file_uploader(
-    "Upload the product's SDS (PDF) to pull candidate Hazard/Precautionary statements",
-    type=["pdf"],
-    disabled=is_tape,
-)
-if sds_upload is not None and not is_tape:
+    sds_upload = None
+else:
+    st.caption(
+        "This product needs an SDS. Upload it and the Storage & Disposal section below is filled in word for word "
+        "from SDS Section 7 (storage) and Section 13 (disposal), so the TDS and SDS always match. "
+        "Hazard statements are not pulled: every TDS uses the standard \"refer to the label and SDS\" language."
+    )
+    sds_upload = st.file_uploader(
+        "Upload the product's SDS (PDF)",
+        type=["pdf"],
+    )
+if sds_upload is not None:
     if st.session_state.get("_sds_uploader_name") != sds_upload.name:
-        st.session_state["_sds_extracted_text"] = extract_candidate_statements(sds_upload.getvalue())
+        _storage, _disposal = extract_storage_disposal(sds_upload.getvalue())
         st.session_state["_sds_uploader_name"] = sds_upload.name
-        st.session_state["_sds_confirmed"] = False
-
-    st.text_area(
-        "Extracted candidate text — this is a rough automated pull, review and correct "
-        "it against the actual SDS before using it (one statement per line)",
-        key="_sds_extracted_text",
-        height=150,
-    )
-    st.checkbox(
-        "I've reviewed this text against the SDS and confirm it's accurate",
-        key="_sds_confirmed",
-    )
+        st.session_state["_sds_storage"] = _storage
+        st.session_state["_sds_disposal"] = _disposal
+        st.session_state["section_Storage & Disposal"] = " ".join(x for x in (_storage, _disposal) if x)
+    if not st.session_state.get("_sds_storage"):
+        st.warning("Couldn't find the storage wording in SDS Section 7 - add it by hand in Storage & Disposal below.")
+    if not st.session_state.get("_sds_disposal"):
+        st.warning("Couldn't find SDS Section 13 (Disposal Considerations) - add it by hand in Storage & Disposal below.")
+    if st.session_state.get("_sds_storage") or st.session_state.get("_sds_disposal"):
+        st.success(f"Storage & Disposal filled from {sds_upload.name} (verbatim). Only edit it if the SDS itself changes.")
 
 # ---------------------------------------------------------------------------
 # Form
@@ -509,6 +623,7 @@ with st.form("tds_form"):
             "Vertical (picks the header color)",
             verticals,
             index=verticals.index(default_vertical) if default_vertical in verticals else 0,
+            format_func=lambda v: v[:1].upper() + v[1:],
         )
 
     product_name = st.text_input("Product name", value=loaded.get("product_name", ""))
@@ -567,7 +682,6 @@ with st.form("tds_form"):
     )
 
     recommended_equipment_text = ""
-    bead_chart_rows = None
     if product_type_label in ("Canister", "Pail / Drum / Tote (bulk)"):
         st.subheader("Recommended Equipment")
         recommended_equipment_text = st.text_area(
@@ -577,15 +691,14 @@ with st.form("tds_form"):
         )
     elif product_type_label == "MS / Cartridge Sealant":
         st.subheader("Bead Chart")
-        st.caption("Appears on page 2, right after Application Instructions.")
-        default_bead_rows = [
-            {"Bead Width": r[0], "Linear Yield / oz": r[1]} for r in loaded.get("bead_chart") or []
-        ] or [{"Bead Width": "", "Linear Yield / oz": ""}]
-        bead_chart_rows = st.data_editor(
-            default_bead_rows,
-            num_rows="dynamic",
+        st.caption(
+            "Standard chart, added automatically on page 2 after Application Instructions. It is the same "
+            "for every product (1 fl oz of product divided by the bead cross-section), so there is nothing to fill in."
+        )
+        st.dataframe(
+            [{"Bead Width": w, "Linear Yield / oz": y} for w, y in standard_bead_chart()],
+            hide_index=True,
             use_container_width=True,
-            key="bead_chart_editor",
         )
 
     st.subheader("Page 2 sections")
@@ -596,22 +709,24 @@ with st.form("tds_form"):
     loaded_sections = {s["title"]: "\n\n".join(s["paragraphs"]) for s in loaded.get("left_sections", [])}
     section_texts = {}
     for title in DEFAULT_SECTIONS:
+        _default = loaded_sections.get(title, "")
+        if title == "Storage & Disposal" and is_tape and not _default:
+            _default = TAPE_STORAGE_BOILERPLATE
+        _kw = {} if f"section_{title}" in st.session_state else {"value": _default}
         section_texts[title] = st.text_area(
             title + " (blank lines separate paragraphs)",
-            value=loaded_sections.get(title, ""),
-            height=100,
+            height=200 if title == "Storage & Disposal" else 100,
             key=f"section_{title}",
+            **_kw,
         )
 
     st.subheader("Precautionary Information")
     precaution_options = [
-        "Non-Hazardous under GHS (standard tape-category boilerplate)",
         "Requires SDS referral",
+        "Non-Hazardous under GHS (standard tape-category boilerplate)",
         "Not yet confirmed (renders as a flagged placeholder)",
         "Custom text",
     ]
-    if st.session_state.get("_sds_confirmed") and not is_tape:
-        precaution_options.insert(0, "Use reviewed SDS extract (shown above)")
     precaution_choice = st.radio("Standard language", precaution_options, index=0)
     custom_precaution_text = ""
     if precaution_choice == "Custom text":
@@ -644,6 +759,13 @@ if submitted or save_clicked:
     if not sku.strip():
         st.error("SKU is required.")
         st.stop()
+    _has_saved_storage = any(sec.get("title") == "Storage & Disposal" for sec in loaded.get("left_sections", []))
+    if not is_tape and sds_upload is None and not _has_saved_storage:
+        st.error(
+            "This product needs an SDS. Upload it above so Storage & Disposal matches the SDS word for word, "
+            "then generate or save again."
+        )
+        st.stop()
 
     # Resolve the photo filename, saving an uploaded file into assets/ first.
     photo_filename = None
@@ -653,16 +775,10 @@ if submitted or save_clicked:
     elif photo_mode == "Use existing asset" and existing_photo_choice:
         photo_filename = existing_photo_choice
 
-    if precaution_choice == "Use reviewed SDS extract (shown above)":
-        # Shipped catalog format: ONE run-on lower-case paragraph (81-0389, C804, IC947).
-        precautionary = {
-            "confirmed": True,
-            "text": precaution_paragraph(lines_to_list(st.session_state.get("_sds_extracted_text", ""))),
-        }
+    if precaution_choice == "Requires SDS referral":
+        precautionary = {"confirmed": True, "text": PRECAUTION_SDS_REFERRAL}
     elif precaution_choice.startswith("Non-Hazardous"):
         precautionary = {"confirmed": True, "text": PRECAUTION_NON_HAZARDOUS}
-    elif precaution_choice == "Requires SDS referral":
-        precautionary = {"confirmed": True, "text": PRECAUTION_SDS_REFERRAL}
     elif precaution_choice == "Custom text":
         precautionary = {"confirmed": True, "text": custom_precaution_text.strip()}
     else:
@@ -687,13 +803,7 @@ if submitted or save_clicked:
         lines_to_list(recommended_equipment_text)
         if product_type_label in ("Canister", "Pail / Drum / Tote (bulk)") else None
     )
-    bead_chart = None
-    if product_type_label == "MS / Cartridge Sealant" and bead_chart_rows:
-        bead_chart = [
-            [row.get("Bead Width", "").strip(), row.get("Linear Yield / oz", "").strip()]
-            for row in bead_chart_rows
-            if row.get("Bead Width", "").strip()
-        ]
+    bead_chart = standard_bead_chart() if product_type_label == "MS / Cartridge Sealant" else None
 
     data = {
         "sku": sku.strip(),
