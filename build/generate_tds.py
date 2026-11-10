@@ -22,6 +22,7 @@ import json
 import sys
 from pathlib import Path
 
+import pymupdf
 from jinja2 import Environment, FileSystemLoader
 from playwright.sync_api import sync_playwright
 
@@ -111,8 +112,20 @@ def verify_two_pages(pdf_path: Path):
     print(f"Verified: {pdf_path.name} is 2 pages at true US Letter (8.5x11in).")
 
 
+# "(Forza Test Method)" is shown only for the T205/T215/T220 family and their crosses.
+FTM_KEEP = {"T205", "T215", "T220", "C-T550", "C-T553", "C-T557", "M-T815", "M-T820", "T-T246", "T-T415", "T-T420"}
+
+
+def strip_ftm(data):
+    if data.get("sku") in FTM_KEEP:
+        return data
+    data["tech_data"] = [[str(r[0]).replace(" (Forza Test Method)", "").replace("(Forza Test Method)", "").strip()] + list(r[1:])
+                         for r in data.get("tech_data", [])]
+    return data
+
+
 def build(product_path: Path, out_path: Path | None = None, photo: str | None = None):
-    data = json.loads(product_path.read_text())
+    data = strip_ftm(json.loads(product_path.read_text()))
     ensure_qr()
 
     env = Environment(loader=FileSystemLoader(str(BUILD_DIR)))
@@ -120,32 +133,58 @@ def build(product_path: Path, out_path: Path | None = None, photo: str | None = 
 
     data["photo"] = photo or data.get("photo")
     data.setdefault("vertical", "insulation")
-    html = template.render(
-        assets_dir=str(ASSETS_DIR.as_posix()),
-        **data,
-    )
-
-    html_path = OUTPUT_DIR / f"{data['sku']}.html"
-    html_path.write_text(html)
+    brand = data.get("brand") or "tape"
+    logo = ASSETS_DIR / f"logo_{brand}.png"
+    if not logo.exists():
+        have = sorted(p.stem[len("logo_"):] for p in ASSETS_DIR.glob("logo_*.png"))
+        raise SystemExit(
+            f"Missing logo file assets/logo_{brand}.png (logos available: {', '.join(have) or 'none'}). "
+            f"Upload it to the assets folder in GitHub."
+        )
 
     if out_path is None:
         out_path = OUTPUT_DIR / f"{data['sku']}_TDS.pdf"
+    html_path = OUTPUT_DIR / f"{data['sku']}.html"
+
+    # Spacing is automatic unless the product JSON forces it: first try the
+    # standard (roomier) layout and, only if that spills past 2 pages, switch
+    # to the compact layout. If even compact doesn't fit, the check below
+    # reports the failure so copy can be trimmed.
+    if "compact" in data:
+        attempts = ["compact" if data["compact"] else "standard"]
+    else:
+        attempts = ["standard", "compact", "tight"]
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": LETTER_WIDTH_PX, "height": LETTER_HEIGHT_PX})
-        page.goto(html_path.as_uri())
-        page.pdf(
-            path=str(out_path),
-            width=f"{LETTER_WIDTH_PX}px",
-            height=f"{LETTER_HEIGHT_PX}px",
-            print_background=True,
-        )
+        for layout in attempts:
+            html = template.render(
+                assets_dir=str(ASSETS_DIR.as_posix()),
+                **{**data, "compact": layout != "standard", "tight": layout == "tight"},
+            )
+            html_path.write_text(html)
+            page.goto(html_path.as_uri())
+            page.pdf(
+                path=str(out_path),
+                width=f"{LETTER_WIDTH_PX}px",
+                height=f"{LETTER_HEIGHT_PX}px",
+                print_background=True,
+            )
+            build.last_layout = layout
+            doc = pymupdf.open(str(out_path))
+            pages = len(doc)
+            doc.close()
+            if pages == 2:
+                break
         browser.close()
 
     verify_two_pages(out_path)
-    print(f"Built: {out_path}")
+    print(f"Built: {out_path} ({build.last_layout} spacing)")
     return out_path
+
+
+build.last_layout = "standard"
 
 
 if __name__ == "__main__":

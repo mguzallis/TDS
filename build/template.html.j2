@@ -60,6 +60,7 @@
      (30.0,22.5)-(284.2,105.8)pt -> left 40px, top 30px, 339x111px.
      (The tape logo keeps its original, user-approved placement above.) */
   .header .logo.bond { top: 30px; left: 40px; height: 111px; }
+  .header .logo.seal { top: 29px; left: 41px; height: 111px; }  /* ForzaSEAL, measured from shipped C-OS55: (30.75,21.75)-(285,105)pt */
   .header .photo {
     position: absolute; z-index: 2; top: -21px; right: 51px; width: 323px; height: 322px;
     object-fit: contain;
@@ -94,8 +95,8 @@
     display: flex; font-family: "Poppins", Arial, sans-serif; font-weight: 700; font-size: 7.2pt; color: #173F66;
     padding: 0 10px; margin-top: 4px;
   }
-  .techdata-head .c1 { width: 55%; text-align: center; }
-  .techdata-head .c2 { width: 45%; text-align: center; }
+  .techdata-head .c1 { width: 50%; text-align: center; }
+  .techdata-head .c2 { width: 50%; text-align: center; }
   .techdata-row {
     display: flex; gap: 6px; margin-bottom: 4px;
   }
@@ -103,9 +104,15 @@
     background: #2A4267; color: #fff; border-radius: 3px; font-family: "Poppins", Arial, sans-serif;
     padding: 4px 8px; font-size: 6.2pt; font-weight: 700; text-align: center;
   }
-  .techdata-row .c1 { width: 55%; }
-  .techdata-row .c2 { width: 45%; }
+  .techdata-row .c1 { width: 50%; }
+  .techdata-row .c2 { width: 50%; }
 
+  /* Equal-height rows: if any value/label wraps, every row gets the same two-line height. */
+  .tdwrap .techdata-row { min-height: 34px; }
+  .tdwrap .techdata-row .c1, .tdwrap .techdata-row .c2 { display: flex; align-items: center; justify-content: center; }
+  body.compact .tdwrap .techdata-row { min-height: 29px; }
+  body.tight .tdwrap .techdata-row { min-height: 26px; }
+  .techdata-row .c2.longval { font-size: 5.4pt; white-space: nowrap; padding-left: 4px; padding-right: 4px; }
   .packaging-boxes { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
   .pack-box { background: #2A4267; color: #fff; font-family: "Poppins", Arial, sans-serif; font-size: 7.2pt; font-weight: 700; padding: 6px 14px; border-radius: 3px; }
 
@@ -124,9 +131,13 @@
      M-OS764, R-T600 and the T310 reference — previously rendered ~25%
      too short with the wrong, too-dark navy. */
   .footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; background: #2A4267; color: #fff; }
-  .footer .claim { font-family: "Poppins", Arial, sans-serif; text-align: center; font-size: 11pt; font-weight: 700; letter-spacing: 1px; padding: 10px 0 6px 0; }
-  .footer .bottom-row { display: flex; align-items: center; justify-content: space-between; padding: 0 32px 18px 32px; }
-  .usa-badge { width: 188px; }
+  .footer .claim { font-family: "Poppins", Arial, sans-serif; text-align: center; font-size: 7.4pt; font-weight: 700; letter-spacing: 0.6px; padding: 10px 0 6px 0; }
+  .footer .bottom-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 0 18px 0; }
+  .footer .usa-wrap { margin-left: 44px; justify-self: start; width: 119px; }
+  .footer .usa-badge { width: 119px; }
+  .footer .usa-note { font-family: "Poppins", Arial, sans-serif; font-size: 4.2pt; line-height: 1.2; margin-top: 2px; text-wrap: balance; width: 119px; text-align: center; color: #fff; }
+  .footer .qr { margin-right: 53px; justify-self: end; }
+  .usa-badge { width: 119px; }
   .usa-badge img { width: 100%; display: block; }
   .footer .contact { font-family: "Poppins", Arial, sans-serif; text-align: center; font-size: 8.1pt; line-height: 1.25; }
   .footer .contact-group + .contact-group { margin-top: 6px; }
@@ -144,11 +155,26 @@
   body.compact p.lead { margin-bottom: 2px; }
   body.compact .techdata-row { margin-bottom: 2px; }
   body.compact .techdata-row .c1, body.compact .techdata-row .c2 { padding: 1px 8px; line-height: 13px; }
-  body.compact .packaging-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; }
+  body.compact .packaging-boxes { display: grid; grid-template-columns: repeat(var(--pcols, 2), 1fr); gap: 3px 6px; }
   body.compact .pack-box { text-align: center; padding: 2.5px 6px; }
+
+  /* Last-resort tighter spacing ("tight"), used automatically only when even
+     "compact" runs past 2 pages. Same fonts and sizes; only gaps shrink. */
+  body.tight .title-block { padding-top: 14px; }
+  body.tight .body { padding-top: 2px; }
+  body.tight .intro { margin: 2px 0 0 0; line-height: 1.1; }
+  body.tight h2.section { margin: 4px 0 2px 0; }
+  body.tight ul.bullets li { line-height: 0.96; margin-bottom: 0; }
+  body.tight p.lead { margin-bottom: 1px; }
+  body.tight .techdata-head { margin-top: 2px; }
+  body.tight .techdata-row { margin-bottom: 1.5px; }
+  body.tight .techdata-row .c1, body.tight .techdata-row .c2 { padding: 0.5px 8px; line-height: 12px; }
+  body.tight .packaging-boxes { gap: 2px 6px; margin-top: 3px; }
+  body.tight .pack-box { padding: 1.5px 6px; }
+  body.tight .body p { margin-bottom: 4px; line-height: 1.3; }
 </style>
 </head>
-<body{% if compact %} class="compact"{% endif %}>
+<body{% if tight %} class="compact tight"{% elif compact %} class="compact"{% endif %}>
 
 <!-- PAGE 1 -->
 <div class="page">
@@ -192,14 +218,18 @@
       {% endif %}
 
       <h2 class="section"{% if not substrates %} style="margin-top:0"{% endif %}>Technical Data</h2>
+      {% set ns_td = namespace(wrap=false) %}
+      {% for row in tech_data %}{% if (row[-1]|string|length) > 24 or (row[0]|string|length) > 28 %}{% set ns_td.wrap = true %}{% endif %}{% endfor %}
+      <div>
       <div class="techdata-head"><div class="c1">Properties</div><div class="c2">Value</div></div>
       {% for row in tech_data %}
-      <div class="techdata-row"><div class="c1">{{ row[0] }}</div><div class="c2">{{ row[-1] }}</div></div>
+      <div class="techdata-row"><div class="c1">{{ row[0] }}</div><div class="c2{% if (row[-1]|string|length) > 24 %} longval{% endif %}">{{ row[-1] }}</div></div>
       {% endfor %}
+      </div>
 
       {% if packaging %}
       <h2 class="section">Packaging</h2>
-      <div class="packaging-boxes">
+      <div class="packaging-boxes" style="--pcols: {{ [packaging|length, 3]|min }};">
         {% for p in packaging %}<div class="pack-box">{{ p }}</div>{% endfor %}
       </div>
       {% endif %}
