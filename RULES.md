@@ -112,7 +112,7 @@ BOND/TAPE/SEAL/COAT brand mismatch needs handling.
 - Contact info is **stacked**, not middot-joined on one line — two groups:
   phone / email / website on their own lines, a 6px gap, then address on
   its own lines below. Font size 8.1pt, line-height 1.25.
-- Flag/USA badge: 188px wide. QR code: 88×88px. Both vertically centered
+- Flag/USA badge: 119px wide (matches shipped TDSs; was 188px), with the caveat "* Manufactured in the USA with domestic and limited foreign-sourced components." centered under it (4.2pt). QR code: 88×88px. Footer is a 3-column grid so the contact block is centered on the page. Claim line is 7.4pt. Technical Data columns are 50/50, every row one line and the same height; values over ~24 characters are set at 5.4pt instead of wrapping. Both vertically centered
   against the contact block (`align-items: center` on `.bottom-row`).
   These sizes went *up* from earlier too-small/off-center attempts once the
   contact block was made more compact — getting the ratio right took a
@@ -351,3 +351,4 @@ of truth when a SKU is in it).
 - Uploading an existing TDS PDF also pulls its product photo (offered first in the Photo section). Saving stores it as assets/<sku>.png.
 - Section text boxes use keys namespaced by start mode + SKU + uploaded file, so switching products never leaves page-2 boxes empty or stale.
 - Tape products use the standard storage boilerplate; non-tape products require the SDS upload for Storage & Disposal.
+- "(Forza Test Method)" is NOT added to Technical Data labels, except T205, T215, T220 and their crosses (C-T550/553/557, M-T815/820, T-T246, T-T415/420). Stripped automatically in the app and generator. A separate test-method column will come later.

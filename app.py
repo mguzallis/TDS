@@ -480,6 +480,8 @@ def master_row_to_loaded(row):
     for line in _split_lines(row.get("Technical Data Table")):
         p, _, v = line.partition(": ")
         tech.append([p.strip(), v.strip()])
+    if code not in {"T205","T215","T220","C-T550","C-T553","C-T557","M-T815","M-T820","T-T246","T-T415","T-T420"}:
+        tech = [[p_.replace(" (Forza Test Method)", "").replace("(Forza Test Method)", "").strip(), v_] for p_, v_ in tech]
     sections = []
     for col, title in _COLUMN_TO_SECTION.items():
         paras = _split_lines(row.get(col))
