@@ -812,23 +812,23 @@ with st.form("tds_form"):
         )
 
     st.subheader("Product photo")
-    photo_options = ["None", "Upload new", "Use existing asset"]
-    if tds_photo:
-        photo_options = ["Photo from the uploaded TDS"] + photo_options
-        st.image(tds_photo, caption="Photo found on the uploaded TDS", width=170)
+    lib_photo = ASSETS_DIR / "photos" / f"{sku.strip()}.png" if sku.strip() else None
+    if lib_photo is not None and not lib_photo.exists():
+        lib_photo = None
+    current_photo = tds_photo or (lib_photo.read_bytes() if lib_photo else None)
+    if current_photo:
+        photo_options = ["Use the photo from the existing TDS", "Upload new"]
+        st.image(current_photo, caption="Photo from the existing TDS", width=170)
     else:
+        photo_options = ["Upload new"]
         st.caption(
-            "To carry over a product's current picture, upload its existing TDS in the pre-fill box near the top "
-            "of the page: the photo on it is pulled automatically."
+            "No existing photo found for this SKU. Upload one below, or upload the product's existing TDS in the "
+            "pre-fill box near the top of the page and its photo is pulled automatically."
         )
     photo_mode = st.radio("Header photo", photo_options, horizontal=True)
     uploaded_photo = None
-    existing_photo_choice = None
     if photo_mode == "Upload new":
         uploaded_photo = st.file_uploader("Upload a product photo (PNG, transparent background)", type=["png"])
-    elif photo_mode == "Use existing asset":
-        photos = list_existing_photos()
-        existing_photo_choice = st.selectbox("Existing photo", photos) if photos else None
 
     submitted = st.form_submit_button("Generate TDS PDF", type="primary")
     save_clicked = st.form_submit_button("Save as draft")
@@ -850,14 +850,17 @@ if submitted or save_clicked:
 
     # Resolve the photo filename, saving an uploaded file into assets/ first.
     photo_filename = None
-    if photo_mode == "Photo from the uploaded TDS" and tds_photo:
-        photo_filename = f"{sku.strip()}.png"
-        (ASSETS_DIR / photo_filename).write_bytes(tds_photo)
+    if photo_mode == "Use the photo from the existing TDS":
+        if tds_photo:
+            photo_filename = f"{sku.strip()}.png"
+            (ASSETS_DIR / photo_filename).write_bytes(tds_photo)
+        elif lib_photo is not None:
+            photo_filename = f"photos/{sku.strip()}.png"
     elif photo_mode == "Upload new" and uploaded_photo is not None:
         photo_filename = f"{sku.strip()}.png"
         (ASSETS_DIR / photo_filename).write_bytes(uploaded_photo.getvalue())
-    elif photo_mode == "Use existing asset" and existing_photo_choice:
-        photo_filename = existing_photo_choice
+    if photo_filename is None:
+        st.warning("No product photo selected, so this TDS is generated without one.")
 
     if precaution_choice == "Requires SDS referral":
         precautionary = {"confirmed": True, "text": PRECAUTION_SDS_REFERRAL}
