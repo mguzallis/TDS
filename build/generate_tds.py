@@ -56,6 +56,40 @@ def ensure_qr(url: str = "https://www.forzabuilt.com"):
     return qr_path
 
 
+def precaution_paragraph(statements):
+    """Join GHS hazard/precautionary statements into the single run-on,
+    lower-case, comma-separated paragraph the shipped catalog uses for
+    Precautionary Information (confirmed on 81-0389, C804, IC947 -- NOT
+    separate paragraphs). Strips H/P codes and heading lines."""
+    import re
+    code = re.compile(r"^\s*[HP]\d{3}(\s*\+\s*[HP]\d{3})*\s*[\u2013\u2014-]\s*")
+    parts = []
+    for line in statements:
+        line = code.sub("", line.strip())
+        if not line or (line.endswith(":") and "statement" in line.lower()):
+            continue
+        segs = re.split(r"(?<=[.:])\s+(?=[A-Z])", line)
+        for seg in segs:
+            seg = seg.strip().rstrip(".:").strip()
+            if not seg:
+                continue
+            words = seg.split(" ")
+            if words[0].isupper() and len(words[0]) > 1 and words[0] not in {"CO2", "CO\u2082"}:
+                i = 0
+                while i < len(words) and words[i].isupper() and len(words[i]) > 1:
+                    words[i] = words[i].lower(); i += 1
+                seg = " ".join(words)
+            elif len(seg) > 1 and seg[1].islower():
+                seg = seg[0].lower() + seg[1:]
+            seg = seg.replace("POISON CENTER", "poison center")
+            if seg.lower() not in {x.lower() for x in parts}:
+                parts.append(seg)
+    if not parts:
+        return ""
+    text = ", ".join(parts)
+    return text[0].upper() + text[1:] + "."
+
+
 def verify_two_pages(pdf_path: Path):
     """Hard ground-truth check: every TDS in this catalog is exactly 2 pages.
     Mirrors the check build_product.py used to run before any mockup was

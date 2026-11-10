@@ -56,6 +56,10 @@
   /* Confirmed against R-T600's embedded photo rect: (331.5,-15.75)-(573.75,225.75)pt
      on a 612x792pt page -> this 816px canvas. The photo bleeds above the header's
      top edge and down into the body, roughly square, right-aligned with ~51px margin. */
+  /* ForzaBOND logo placement measured from shipped IC947: PDF rect
+     (30.0,22.5)-(284.2,105.8)pt -> left 40px, top 30px, 339x111px.
+     (The tape logo keeps its original, user-approved placement above.) */
+  .header .logo.bond { top: 30px; left: 40px; height: 111px; }
   .header .photo {
     position: absolute; z-index: 2; top: -21px; right: 51px; width: 323px; height: 322px;
     object-fit: contain;
@@ -128,9 +132,23 @@
   .footer .contact-group + .contact-group { margin-top: 6px; }
   .footer .qr { width: 88px; height: 88px; }
   .footer .qr img { width: 100%; height: 100%; }
+
+  /* Optional dense layout ("compact": true in the product JSON) for long
+     canister/pail sheets that overflow 2 pages at the default spacing.
+     Matches the tighter row pitch / 2-up packaging grid seen in shipped
+     IC933 and 81-0389 (tech-data row pitch ~11pt). Off by default so
+     existing approved sheets are unchanged. */
+  body.compact .intro { line-height: 1.15; }
+  body.compact h2.section { margin: 7px 0 3px 0; }
+  body.compact ul.bullets li { line-height: 1.0; margin-bottom: 0.5px; }
+  body.compact p.lead { margin-bottom: 2px; }
+  body.compact .techdata-row { margin-bottom: 2px; }
+  body.compact .techdata-row .c1, body.compact .techdata-row .c2 { padding: 1px 8px; line-height: 13px; }
+  body.compact .packaging-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; }
+  body.compact .pack-box { text-align: center; padding: 2.5px 6px; }
 </style>
 </head>
-<body>
+<body{% if compact %} class="compact"{% endif %}>
 
 <!-- PAGE 1 -->
 <div class="page">
@@ -138,7 +156,7 @@
 
   <div class="header">
     <img class="bg" src="{{ assets_dir }}/headers/{{ vertical | default('insulation') }}.png">
-    <img class="logo" src="{{ assets_dir }}/logo.png">
+    <img class="logo {{ brand | default('tape') }}" src="{{ assets_dir }}/logo_{{ brand | default('tape') }}.png">
     {% if photo %}<img class="photo" src="{{ assets_dir }}/{{ photo }}">{% endif %}
   </div>
 
